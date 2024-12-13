@@ -966,7 +966,7 @@ asmlinkage long sys_lsm_set_self_attr(unsigned int attr, struct lsm_ctx *ctx,
 asmlinkage long sys_lsm_list_modules(u64 *ids, size_t *size, u32 flags);
 asmlinkage long sys_luis_capture_memory_snapshot(struct memory_snapshot __user *user_snapshot);
 asmkinkage long sys_luis_track_syscall_usage(struct track_counters __user *trackers);
-
+asmlinkage long sys_luis_get_io_throttle(struct all_io_stats __user *user_stats);
 /*
  * Architecture-specific system calls
  */

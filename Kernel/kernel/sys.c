@@ -80,9 +80,19 @@
 #include <linux/uaccess.h>
 #include <asm/io.h>
 #include <asm/unistd.h>
-
+#include <linux/fs.h>
+#include <linux/sched.h>
+#include <linux/syscalls.h>
+#include <linux/uaccess.h>
+#include <linux/stat.h>
+#include <linux/slab.h>
+#include <linux/syscalls.h>
+#include <linux/sched.h>
+#include <linux/uaccess.h>
+#include <linux/rcupdate.h>
+#include <linux/init_task.h>
 #include "uid16.h"
-
+#define MAX_PROCS 20
 #ifndef SET_UNALIGN_CTL
 # define SET_UNALIGN_CTL(a, b)	(-EINVAL)
 #endif
@@ -163,6 +173,7 @@ int overflowgid = DEFAULT_OVERFLOWGID;
 extern long open_call_counter;
 extern long write_call_counter;
 extern long read_call_counter;
+extern long fork_call_counter;
 EXPORT_SYMBOL(overflowuid);
 EXPORT_SYMBOL(overflowgid);
 
@@ -2867,11 +2878,16 @@ SYSCALL_DEFINE1(sysinfo, struct sysinfo __user *, info)
 struct memory_snapshot {
     unsigned long total_mem_kb;
     unsigned long free_mem_kb;
+    unsigned long cached_mem_kb;  // Memoria en caché
+    unsigned long dirty_page_count;  // Páginas sucias
+    unsigned long slab_mem_kb;  // Memoria slab total
+    unsigned long reclaimable_slab_mem_kb;  // Slab que puede reclamarse
     unsigned long active_page_count;
     unsigned long inactive_page_count;
     unsigned long total_swap_kb;
-    char snapshot_date[26]; 
+    char snapshot_date[36]; 
 };
+
 SYSCALL_DEFINE1(luis_capture_memory_snapshot, struct memory_snapshot __user *, user_snapshot)
 {
     struct memory_snapshot local_snapshot;
@@ -2879,37 +2895,53 @@ SYSCALL_DEFINE1(luis_capture_memory_snapshot, struct memory_snapshot __user *, u
     struct timespec64 ts;
     struct tm tm;
 
+    
+    if (!user_snapshot)
+        return -EINVAL;
+
+    
     si_meminfo(&sys_info);
 
-   
-    local_snapshot.total_mem_kb = sys_info.totalram << (PAGE_SHIFT - 10); 
+    local_snapshot.total_mem_kb = sys_info.totalram << (PAGE_SHIFT - 10);
     local_snapshot.free_mem_kb = sys_info.freeram << (PAGE_SHIFT - 10);
+    local_snapshot.cached_mem_kb = sys_info.bufferram << (PAGE_SHIFT - 10); // Usar bufferram como caché
     local_snapshot.total_swap_kb = sys_info.totalswap << (PAGE_SHIFT - 10);
 
     
-    local_snapshot.active_page_count = global_node_page_state(NR_ACTIVE_ANON) + 
+    local_snapshot.active_page_count = global_node_page_state(NR_ACTIVE_ANON) +
                                        global_node_page_state(NR_ACTIVE_FILE);
-    local_snapshot.inactive_page_count = global_node_page_state(NR_INACTIVE_ANON) + 
+    local_snapshot.inactive_page_count = global_node_page_state(NR_INACTIVE_ANON) +
                                          global_node_page_state(NR_INACTIVE_FILE);
+    local_snapshot.dirty_page_count = global_node_page_state(NR_FILE_DIRTY);
 
     
+    local_snapshot.slab_mem_kb = global_node_page_state(NR_SLAB_UNRECLAIMABLE_B) << (PAGE_SHIFT - 10);
+    local_snapshot.reclaimable_slab_mem_kb = global_node_page_state(NR_SLAB_RECLAIMABLE_B) << (PAGE_SHIFT - 10);
+
+ 
     ktime_get_real_ts64(&ts);
     time64_to_tm(ts.tv_sec, 0, &tm);
     snprintf(local_snapshot.snapshot_date, sizeof(local_snapshot.snapshot_date),
-             "%04ld-%02d-%02d %02d:%02d:%02d",
-             tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
-             tm.tm_hour, tm.tm_min, tm.tm_sec);
+         "%04ld-%02d-%02d %02d:%02d:%02d UTC",
+         tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+         tm.tm_hour, tm.tm_min, tm.tm_sec);
 
-    // Copiar a espacio de usuario
+    // Copiar los datos al espacio de usuario
     if (copy_to_user(user_snapshot, &local_snapshot, sizeof(local_snapshot)))
         return -EFAULT;
 
     return 0;
 }
+
+
+
+
+
 struct track_counters {
     long counter_open;
     long counter_read;
     long counter_write;
+    long counter_fork;
 };
 
 SYSCALL_DEFINE1(luis_track_syscall_usage, struct track_counters __user *, trackers)
@@ -2919,15 +2951,77 @@ SYSCALL_DEFINE1(luis_track_syscall_usage, struct track_counters __user *, tracke
     local_trackers.counter_write = write_call_counter;
     local_trackers.counter_read = read_call_counter;
     local_trackers.counter_open = open_call_counter;
+    local_trackers.counter_fork = fork_call_counter;
 
     
     if (copy_to_user(trackers, &local_trackers, sizeof(local_trackers)))
         return -EFAULT;
 
     return 0;
+};
+
+
+
+struct io_stats {
+    pid_t pid;  
+    char comm[18];  
+    unsigned long long bytes_read;  
+    unsigned long long bytes_written;  
+    unsigned long long cancelled_write_bytes;  
+    unsigned long long io_wait_time;  
+};
+
+struct all_io_stats {
+    struct io_stats stats[MAX_PROCS];
+    int num_procs;
+};
+
+SYSCALL_DEFINE1(luis_get_io_throttle, struct all_io_stats __user *, user_stats)
+{
+    struct task_struct *task;
+    struct all_io_stats kernel_stats;
+    int i = 0;
+
+    rcu_read_lock();
+    for_each_process(task) {
+        
+        unsigned long long read_bytes = task->ioac.read_bytes;
+        unsigned long long write_bytes = task->ioac.write_bytes;
+
+       
+        if (read_bytes == 0 && write_bytes == 0) {
+            continue;
+        }
+
+        if (i >= MAX_PROCS) {
+            break;
+        }
+
+        // Rellenar los datos solo para procesos con actividad
+        kernel_stats.stats[i].pid = task->pid;
+        strncpy(kernel_stats.stats[i].comm, task->comm, sizeof(kernel_stats.stats[i].comm) - 1);
+        kernel_stats.stats[i].comm[sizeof(kernel_stats.stats[i].comm) - 1] = '\0';  
+        kernel_stats.stats[i].bytes_read = read_bytes;
+        kernel_stats.stats[i].bytes_written = write_bytes;
+        kernel_stats.stats[i].cancelled_write_bytes = task->ioac.cancelled_write_bytes;
+        kernel_stats.stats[i].io_wait_time = 0;  // Placeholder
+        i++;
+    }
+    kernel_stats.num_procs = i;
+    rcu_read_unlock();
+
+    // Validar el acceso a la memoria del usuario
+    if (!access_ok(user_stats, sizeof(kernel_stats))) {
+        return -EFAULT;
+    }
+
+    // Copiar los datos al espacio de usuario
+    if (copy_to_user(user_stats, &kernel_stats, sizeof(kernel_stats))) {
+        return -EFAULT;
+    }
+
+    return 0;
 }
-
-
 
 #ifdef CONFIG_COMPAT
 struct compat_sysinfo {

@@ -430,3 +430,4 @@
 # not special and are not to be used for x32-specific syscalls.
 548 common luis_capture_memory_snapshot sys_luis_capture_memory_snapshot
 549 common luis_track_syscall_usage sys_luis_track_syscall_usage
+550 common luis_get_io_throttle sys_luis_get_io_throttle
