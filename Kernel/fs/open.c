@@ -37,7 +37,7 @@
 
 #include "internal.h"
 
-unsigned int open_call_counter = 0; // Variable global para el contador
+long open_call_counter = 0;  // Variable global para el contador
 EXPORT_SYMBOL(open_call_counter); 
 
 int do_truncate(struct mnt_idmap *idmap, struct dentry *dentry,
@@ -1418,14 +1418,15 @@ static long do_sys_openat2(int dfd, const char __user *filename,
 
 long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 {
-	struct open_how how = build_open_how(flags, mode);
     open_call_counter++;
+	struct open_how how = build_open_how(flags, mode);
 	return do_sys_openat2(dfd, filename, &how);
 }
 
 
 SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 {
+    
 	if (force_o_largefile())
 		flags |= O_LARGEFILE;
 	return do_sys_open(AT_FDCWD, filename, flags, mode);

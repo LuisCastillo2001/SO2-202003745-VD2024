@@ -64,7 +64,8 @@
 #include <linux/rcupdate.h>
 #include <linux/uidgid.h>
 #include <linux/cred.h>
-
+#include <linux/time.h>   
+#include <linux/swap.h>   
 #include <linux/kernel.h>
 #include <linux/syscalls.h>
 #include <linux/mm.h>
@@ -160,6 +161,8 @@
 int overflowuid = DEFAULT_OVERFLOWUID;
 int overflowgid = DEFAULT_OVERFLOWGID;
 extern long open_call_counter;
+extern long write_call_counter;
+extern long read_call_counter;
 EXPORT_SYMBOL(overflowuid);
 EXPORT_SYMBOL(overflowgid);
 
@@ -2861,49 +2864,67 @@ SYSCALL_DEFINE1(sysinfo, struct sysinfo __user *, info)
 	return 0;
 }
 
-struct mem_snapshot {
-    unsigned long total_memory;
-    unsigned long free_memory;
-    unsigned long active_pages;
-    unsigned long inactive_pages;
+struct memory_snapshot {
+    unsigned long total_mem_kb;
+    unsigned long free_mem_kb;
+    unsigned long active_page_count;
+    unsigned long inactive_page_count;
+    unsigned long total_swap_kb;
+    char snapshot_date[26]; 
 };
-
-SYSCALL_DEFINE1(luis_capture_memory_snapshot, struct mem_snapshot __user *, snapshot)
+SYSCALL_DEFINE1(luis_capture_memory_snapshot, struct memory_snapshot __user *, user_snapshot)
 {
-    struct mem_snapshot snap;
-    struct sysinfo si;
+    struct memory_snapshot local_snapshot;
+    struct sysinfo sys_info;
+    struct timespec64 ts;
+    struct tm tm;
 
-    si_meminfo(&si);
+    si_meminfo(&sys_info);
 
-    snap.total_memory = si.totalram << (PAGE_SHIFT - 10); 
-    snap.free_memory = si.freeram << (PAGE_SHIFT - 10);
-    snap.active_pages = global_node_page_state(NR_ACTIVE_ANON) + 
-                        global_node_page_state(NR_ACTIVE_FILE);
-    snap.inactive_pages = global_node_page_state(NR_INACTIVE_ANON) + 
-                          global_node_page_state(NR_INACTIVE_FILE);
+   
+    local_snapshot.total_mem_kb = sys_info.totalram << (PAGE_SHIFT - 10); 
+    local_snapshot.free_mem_kb = sys_info.freeram << (PAGE_SHIFT - 10);
+    local_snapshot.total_swap_kb = sys_info.totalswap << (PAGE_SHIFT - 10);
 
-    if (copy_to_user(snapshot, &snap, sizeof(snap)))
+    
+    local_snapshot.active_page_count = global_node_page_state(NR_ACTIVE_ANON) + 
+                                       global_node_page_state(NR_ACTIVE_FILE);
+    local_snapshot.inactive_page_count = global_node_page_state(NR_INACTIVE_ANON) + 
+                                         global_node_page_state(NR_INACTIVE_FILE);
+
+    
+    ktime_get_real_ts64(&ts);
+    time64_to_tm(ts.tv_sec, 0, &tm);
+    snprintf(local_snapshot.snapshot_date, sizeof(local_snapshot.snapshot_date),
+             "%04ld-%02d-%02d %02d:%02d:%02d",
+             tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+             tm.tm_hour, tm.tm_min, tm.tm_sec);
+
+    // Copiar a espacio de usuario
+    if (copy_to_user(user_snapshot, &local_snapshot, sizeof(local_snapshot)))
         return -EFAULT;
 
     return 0;
 }
-
 struct track_counters {
     long counter_open;
-}
+    long counter_read;
+    long counter_write;
+};
 
 SYSCALL_DEFINE1(luis_track_syscall_usage, struct track_counters __user *, trackers)
 {
     struct track_counters local_trackers;
 
-    
+    local_trackers.counter_write = write_call_counter;
+    local_trackers.counter_read = read_call_counter;
     local_trackers.counter_open = open_call_counter;
 
     
     if (copy_to_user(trackers, &local_trackers, sizeof(local_trackers)))
         return -EFAULT;
 
-    return 0; // Éxito
+    return 0;
 }
 
 
