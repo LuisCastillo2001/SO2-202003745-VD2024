@@ -70,7 +70,7 @@
 #include <linux/syscalls.h>
 #include <linux/mm.h>
 #include <linux/uaccess.h>
-
+#include <linux/jiffies.h>
 #include <linux/nospec.h>
 
 #include <linux/kmsg_dump.h>
@@ -3004,7 +3004,7 @@ SYSCALL_DEFINE1(luis_get_io_throttle, struct all_io_stats __user *, user_stats)
         kernel_stats.stats[i].bytes_read = read_bytes;
         kernel_stats.stats[i].bytes_written = write_bytes;
         kernel_stats.stats[i].cancelled_write_bytes = task->ioac.cancelled_write_bytes;
-        kernel_stats.stats[i].io_wait_time = 0;  // Placeholder
+        kernel_stats.stats[i].io_wait_time = task->se.sum_exec_runtime - task->se.vruntime;
         i++;
     }
     kernel_stats.num_procs = i;
