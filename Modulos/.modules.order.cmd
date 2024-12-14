@@ -1,0 +1,1 @@
+savedcmd_/home/luis/Escritorio/SO2-202003745-VD2024/Modulos/modules.order := {   echo /home/luis/Escritorio/SO2-202003745-VD2024/Modulos/cpu_stats.o; :; } > /home/luis/Escritorio/SO2-202003745-VD2024/Modulos/modules.order

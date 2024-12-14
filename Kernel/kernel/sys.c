@@ -2997,7 +2997,7 @@ SYSCALL_DEFINE1(luis_get_io_throttle, struct all_io_stats __user *, user_stats)
             break;
         }
 
-        // Rellenar los datos solo para procesos con actividad
+        
         kernel_stats.stats[i].pid = task->pid;
         strncpy(kernel_stats.stats[i].comm, task->comm, sizeof(kernel_stats.stats[i].comm) - 1);
         kernel_stats.stats[i].comm[sizeof(kernel_stats.stats[i].comm) - 1] = '\0';  
@@ -3010,7 +3010,7 @@ SYSCALL_DEFINE1(luis_get_io_throttle, struct all_io_stats __user *, user_stats)
     kernel_stats.num_procs = i;
     rcu_read_unlock();
 
-    // Validar el acceso a la memoria del usuario
+    
     if (!access_ok(user_stats, sizeof(kernel_stats))) {
         return -EFAULT;
     }

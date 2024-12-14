@@ -1,0 +1,1 @@
+savedcmd_/home/luis/Escritorio/SO2-202003745-VD2024/Modulos/disk_stats/disk_stats.mod := printf '%s\n'   disk_stats.o | awk '!x[$$0]++ { print("/home/luis/Escritorio/SO2-202003745-VD2024/Modulos/disk_stats/"$$0) }' > /home/luis/Escritorio/SO2-202003745-VD2024/Modulos/disk_stats/disk_stats.mod
