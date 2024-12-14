@@ -1026,16 +1026,17 @@ deps_/home/luis/Escritorio/SO2-202003745-VD2024/Modulos/disk_stats/disk_stats.o 
     $(wildcard include/config/HAVE_MOD_ARCH_SPECIFIC) \
     $(wildcard include/config/MODULES_USE_ELF_REL) \
     $(wildcard include/config/MODULES_USE_ELF_RELA) \
+  include/linux/namei.h \
+  include/linux/statfs.h \
+  arch/x86/include/uapi/asm/statfs.h \
+  include/asm-generic/statfs.h \
+  include/uapi/asm-generic/statfs.h \
   include/linux/proc_fs.h \
     $(wildcard include/config/PROC_PID_ARCH_STATUS) \
   include/linux/seq_file.h \
   include/linux/string_helpers.h \
   include/linux/ctype.h \
   include/linux/string_choices.h \
-  include/linux/statfs.h \
-  arch/x86/include/uapi/asm/statfs.h \
-  include/asm-generic/statfs.h \
-  include/uapi/asm-generic/statfs.h \
 
 /home/luis/Escritorio/SO2-202003745-VD2024/Modulos/disk_stats/disk_stats.o: $(deps_/home/luis/Escritorio/SO2-202003745-VD2024/Modulos/disk_stats/disk_stats.o)
 

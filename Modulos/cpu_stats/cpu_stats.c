@@ -69,7 +69,7 @@ static unsigned long long get_cpu_total_time(void) {
         return -1;
     }
 
-    buffer[bytes_read] = '\0'; // Aseguramos terminación de la cadena
+    buffer[bytes_read] = '\0'; 
 
     if (sscanf(buffer, "cpu  %llu %llu %llu %llu %llu %llu %llu %llu",
                &user, &nice, &system, &idle, &iowait, &irq, &softirq, &steal) != 8) {
