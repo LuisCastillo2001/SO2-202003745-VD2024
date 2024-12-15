@@ -488,4 +488,101 @@ SYSCALL_DEFINE1(luis_track_syscall_usage, struct track_counters __user *, tracke
     }
     ```
 
-    
+### 3.2.3 Implementación del get_io_throttle
+
+Este código define una syscall llamada `luis_get_io_throttle`, cuyo objetivo es capturar estadísticas de I/O (entrada/salida) de procesos activos en el sistema.
+
+```c
+struct io_stats {
+    pid_t pid;  
+    char comm[18];  
+    unsigned long long bytes_read;  
+    unsigned long long bytes_written;  
+    unsigned long long cancelled_write_bytes;  
+    unsigned long long io_wait_time;  
+};
+
+struct all_io_stats {
+    struct io_stats stats[MAX_PROCS];
+    int num_procs;
+};
+
+SYSCALL_DEFINE1(luis_get_io_throttle, struct all_io_stats __user *, user_stats)
+{
+    struct task_struct *task;
+    struct all_io_stats kernel_stats;
+    int i = 0;
+
+    rcu_read_lock();
+    for_each_process(task) {
+
+        unsigned long long read_bytes = task->ioac.read_bytes;
+        unsigned long long write_bytes = task->ioac.write_bytes;
+
+
+        if (read_bytes == 0 && write_bytes == 0) {
+            continue;
+        }
+
+        if (i >= MAX_PROCS) {
+            break;
+        }
+
+
+        kernel_stats.stats[i].pid = task->pid;
+        strncpy(kernel_stats.stats[i].comm, task->comm, sizeof(kernel_stats.stats[i].comm) - 1);
+        kernel_stats.stats[i].comm[sizeof(kernel_stats.stats[i].comm) - 1] = '\0';  
+        kernel_stats.stats[i].bytes_read = read_bytes;
+        kernel_stats.stats[i].bytes_written = write_bytes;
+        kernel_stats.stats[i].cancelled_write_bytes = task->ioac.cancelled_write_bytes;
+        kernel_stats.stats[i].io_wait_time = task->se.sum_exec_runtime - task->se.vruntime;
+        i++;
+    }
+    kernel_stats.num_procs = i;
+    rcu_read_unlock();
+
+
+    if (!access_ok(user_stats, sizeof(kernel_stats))) {
+        return -EFAULT;
+    }
+
+    // Copiar los datos al espacio de usuario
+    if (copy_to_user(user_stats, &kernel_stats, sizeof(kernel_stats))) {
+        return -EFAULT;
+    }
+
+    return 0;
+}
+```
+
+### **Funcionamiento de la syscall**
+
+1. **Inicio de la syscall (`SYSCALL_DEFINE1`):**
+   
+   - **Parámetro de entrada:**  
+     Recibe un puntero `user_stats` a una estructura `all_io_stats` ubicada en el espacio de usuario, donde se copiarán los datos.
+
+2. **Bloqueo de lectura de RCU (`rcu_read_lock`):**
+   
+   - Asegura que el acceso a la lista de procesos sea seguro durante la iteración.
+
+3. **Iteración sobre procesos (`for_each_process`):**
+   
+   - Recorre todos los procesos activos en el sistema mediante la lista global de procesos (`task_struct`).
+
+4. **Obtención de estadísticas por proceso:**
+   
+   - Se obtienen los bytes leídos y escritos del proceso (`task->ioac.read_bytes` y `task->ioac.write_bytes`).
+   - Si ambos valores son 0, el proceso es ignorado, ya que no ha realizado operaciones de I/O.
+   - Los datos son almacenados en `kernel_stats.stats[i]`:
+     - `pid` y `comm`: ID y nombre del proceso.
+     - `bytes_read`, `bytes_written`, y `cancelled_write_bytes`: Estadísticas relacionadas con el uso de I/O.
+     - `io_wait_time`: Calculado como la diferencia entre `sum_exec_runtime` (tiempo total de ejecución) y `vruntime` (tiempo virtual ejecutado). Esto representa el tiempo total que el proceso esperó en operaciones de I/O.
+
+5. **Límite máximo de procesos (`MAX_PROCS`):**
+   
+   - La syscall se detiene si se alcanza este límite para evitar desbordamientos del arreglo.
+
+6. **Liberación del bloqueo de RCU (`rcu_read_unlock`):**
+   
+   - Finaliza la sección protegida después de completar la iteración.
