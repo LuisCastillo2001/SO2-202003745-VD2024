@@ -586,3 +586,407 @@ SYSCALL_DEFINE1(luis_get_io_throttle, struct all_io_stats __user *, user_stats)
 6. **Liberación del bloqueo de RCU (`rcu_read_unlock`):**
    
    - Finaliza la sección protegida después de completar la iteración.
+
+# 4. Módulos del kernel
+
+Se crearon tres módulos de kernel para poder obtener las siguientes estádisticas.
+
+- **Estadísticas de CPU:** El módulo debe obtener y registrar el porcentaje de uso de CPU.
+
+- **Estadísticas de memoria:** Debe mostrar el uso actual de memoria total y memoria disponible.
+
+- **Estadísticas de almacenamiento:** Muestra el espacio total y el espacio libre en el disco, específico a una partición indicada.
+
+A continuación se mostrará el código para cada una de los módulos implementados y una breve explicación.
+
+## 4.1 Estadísticas del CPU
+
+```c
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/init.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
+#include <linux/sched.h>
+#include <linux/fs.h>
+#include <linux/statfs.h>
+
+#define AUTHOR "Luis Antonio Castillo Javier"
+#define DESCRIPTION "Módulo para monitorear estadísticas de CPU"
+#define MODULE_NAME "cpu_stats"
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR(AUTHOR);
+MODULE_DESCRIPTION(DESCRIPTION);
+MODULE_VERSION("1.0");
+
+static unsigned long long prev_idle_time = 0, prev_total_time = 0;
+
+static unsigned long long get_cpu_idle_time(void) {
+    struct file *file;
+    char buffer[128] = {0};
+    ssize_t bytes_read;
+    unsigned long long idle, iowait;
+
+    file = filp_open("/proc/stat", O_RDONLY, 0);
+    if (IS_ERR(file)) {
+        pr_err("No se pudo abrir /proc/stat\n");
+        return -1;
+    }
+
+    bytes_read = kernel_read(file, buffer, sizeof(buffer) - 1, &file->f_pos);
+    filp_close(file, NULL);
+
+    if (bytes_read <= 0) {
+        pr_err("No se pudo leer /proc/stat\n");
+        return -1;
+    }
+
+    buffer[bytes_read] = '\0'; // Aseguramos terminación de la cadena
+
+    if (sscanf(buffer, "cpu  %*llu %*llu %*llu %llu %llu %*llu %*llu %*llu",
+               &idle, &iowait) != 2) {
+        pr_err("Error al parsear /proc/stat\n");
+        return -1;
+    }
+
+    return idle + iowait;
+}
+
+static unsigned long long get_cpu_total_time(void) {
+    struct file *file;
+    char buffer[128] = {0};
+    ssize_t bytes_read;
+    unsigned long long user, nice, system, idle, iowait, irq, softirq, steal;
+
+    file = filp_open("/proc/stat", O_RDONLY, 0);
+    if (IS_ERR(file)) {
+        pr_err("No se pudo abrir /proc/stat\n");
+        return -1;
+    }
+
+    bytes_read = kernel_read(file, buffer, sizeof(buffer) - 1, &file->f_pos);
+    filp_close(file, NULL);
+
+    if (bytes_read <= 0) {
+        pr_err("No se pudo leer /proc/stat\n");
+        return -1;
+    }
+
+    buffer[bytes_read] = '\0'; 
+
+    if (sscanf(buffer, "cpu  %llu %llu %llu %llu %llu %llu %llu %llu",
+               &user, &nice, &system, &idle, &iowait, &irq, &softirq, &steal) != 8) {
+        pr_err("Error al parsear /proc/stat\n");
+        return -1;
+    }
+
+    return user + nice + system + idle + iowait + irq + softirq + steal;
+}
+
+static int calculate_cpu_usage(void) {
+    unsigned long long idle_time, total_time, delta_idle, delta_total;
+    int cpu_usage = 0;
+
+    idle_time = get_cpu_idle_time();
+    total_time = get_cpu_total_time();
+
+    if (idle_time == -1 || total_time == -1) {
+        return -1;
+    }
+
+    delta_idle = idle_time - prev_idle_time;
+    delta_total = total_time - prev_total_time;
+
+    prev_idle_time = idle_time;
+    prev_total_time = total_time;
+
+    if (delta_total > 0) {
+        cpu_usage = (100 * (delta_total - delta_idle)) / delta_total;
+    }
+
+    return cpu_usage;
+}
+
+static int show_cpu_stats(struct seq_file *m, void *v) {
+    int cpu_usage = calculate_cpu_usage();
+    if (cpu_usage >= 0) {
+        seq_printf(m, "Uso de CPU: %d%%\n", cpu_usage);
+    } else {
+        seq_printf(m, "Uso de CPU: Error\n");
+    }
+    return 0;
+}
+
+static int open_cpu_stats(struct inode *inode, struct file *file) {
+    return single_open(file, show_cpu_stats, NULL);
+}
+
+static const struct proc_ops cpu_stats_ops = {
+    .proc_open = open_cpu_stats,
+    .proc_read = seq_read,
+    .proc_release = single_release,
+};
+
+static int __init cpu_stats_init(void) {
+    if (!proc_create("cpu_stats", 0, NULL, &cpu_stats_ops)) {
+        pr_err("No se pudo crear /proc/cpu_stats\n");
+        return -ENOMEM;
+    }
+
+    pr_info("Módulo %s cargado correctamente\n", MODULE_NAME);
+    return 0;
+}
+
+static void __exit cpu_stats_exit(void) {
+    remove_proc_entry("cpu_stats", NULL);
+    pr_info("Módulo %s desinstalado\n", MODULE_NAME);
+}
+
+module_init(cpu_stats_init);
+module_exit(cpu_stats_exit);
+```
+
+- **Lectura de `/proc/stat`:** Obtiene los tiempos de CPU (idle, iowait, user, system, etc.) desde el archivo `/proc/stat` para monitorear la actividad de la CPU.
+
+- **Cálculo de uso de CPU:** Compara los tiempos actuales con los previos y calcula el porcentaje de uso usando la fórmula:
+  
+  Uso de CPU = (delta_total− delta_idle/delta_total)​×100
+
+- **Archivo virtual en `/proc`:** Crea `/proc/cpu_stats`, que muestra el uso de CPU en porcentaje cada vez que se lee.
+
+- **Carga y limpieza:** Al cargar el módulo, se crea `/proc/cpu_stats`, y al desinstalarlo, se elimina este archivo.
+
+### Salida del sistema
+
+<img title="" src="assets/2024-12-14-20-06-09-image.png" alt="" width="641">
+
+Muestra el uso del cpu en "%"
+
+## 4.2 Estadísticas de memoria
+
+```c
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/init.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
+#include <linux/mm.h>
+#include <linux/fs.h>
+#include <linux/statfs.h>
+
+#define AUTHOR "Luis Antonio Castillo Javier"
+#define DESCRIPTION "Módulo para monitorear estadísticas de memoria"
+#define MODULE_NAME "mem_stats"
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR(AUTHOR);
+MODULE_DESCRIPTION(DESCRIPTION);
+MODULE_VERSION("1.0");
+
+static int show_mem_stats(struct seq_file *m, void *v) {
+    struct sysinfo si;
+
+    si_meminfo(&si);
+
+    seq_printf(m, "Memoria Total: %lu KB\n", si.totalram * si.mem_unit / 1024);
+    seq_printf(m, "Memoria Libre: %lu KB\n", si.freeram * si.mem_unit / 1024);
+    seq_printf(m, "Memoria en Buffers: %lu KB\n", si.bufferram * si.mem_unit / 1024);
+    seq_printf(m, "Swap Total: %lu KB\n", si.totalswap * si.mem_unit / 1024);
+    seq_printf(m, "Swap Libre: %lu KB\n", si.freeswap * si.mem_unit / 1024);
+
+    return 0;
+}
+
+static int open_mem_stats(struct inode *inode, struct file *file) {
+    return single_open(file, show_mem_stats, NULL);
+}
+
+static const struct proc_ops mem_stats_ops = {
+    .proc_open = open_mem_stats,
+    .proc_read = seq_read,
+    .proc_release = single_release,
+};
+
+static int __init mem_stats_init(void) {
+    if (!proc_create("mem_stats", 0, NULL, &mem_stats_ops)) {
+        pr_err("No se pudo crear /proc/mem_stats\n");
+        return -ENOMEM;
+    }
+
+    pr_info("Módulo %s cargado correctamente\n", MODULE_NAME);
+    return 0;
+}
+
+static void __exit mem_stats_exit(void) {
+    remove_proc_entry("mem_stats", NULL);
+    pr_info("Módulo %s desinstalado\n", MODULE_NAME);
+}
+
+module_init(mem_stats_init);
+module_exit(mem_stats_exit);
+```
+
+- **Lectura de estadísticas de memoria:** Usa la función `si_meminfo` para obtener información del sistema sobre la memoria total, libre, buffers y swap.
+
+- **Cálculo y formato:** Convierte las estadísticas obtenidas a kilobytes (KB) y las muestra usando `seq_printf` en un archivo virtual.
+
+- **Archivo `/proc/mem_stats`:** Crea este archivo para que, al leerlo, se muestren las estadísticas actuales de memoria del sistema.
+
+- **Carga y limpieza del módulo:** Al cargar el módulo, se crea el archivo en `/proc`. Al desinstalarlo, se elimina este archivo.
+
+- **Propósito general:** Permite monitorear el uso de memoria y swap directamente desde el espacio de usuario con herramientas como `cat /proc/mem_stats`.
+
+### Salida del módulo
+
+![](assets/2024-12-14-20-09-16-image.png)
+
+# Estadísticas del cpu
+
+```c
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/fs.h>
+#include <linux/namei.h>
+#include <linux/statfs.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
+
+#define PROC_FILENAME "disk_stats" 
+#define AUTHOR "Luis Antonio Castillo Javier"
+#define DESCRIPTION "Módulo para monitorear estadísticas de disco"
+#define MODULE_NAME "disk_stats"
+
+static struct proc_dir_entry *proc_entry;
+
+
+static int proc_show(struct seq_file *m, void *v)
+{
+    struct path path;
+    struct kstatfs stat;
+    int ret;
+    const char *mount_point = "/";
+
+
+    ret = kern_path(mount_point, LOOKUP_FOLLOW, &path);
+    if (ret) {
+        seq_printf(m, "Error al obtener el path de %s: %d\n", mount_point, ret);
+        return ret;
+    }
+
+
+    ret = vfs_statfs(&path, &stat);
+    if (ret) {
+        seq_printf(m, "Error al obtener estadísticas de %s: %d\n", mount_point, ret);
+        return ret;
+    }
+
+
+    unsigned long long free_space = stat.f_bsize * stat.f_bfree;
+    unsigned long long total_space = stat.f_bsize * stat.f_blocks;
+
+
+    seq_printf(m, "Punto de montaje: %s\n", mount_point);
+    seq_printf(m, "Espacio total: %llu bytes\n", total_space);
+    seq_printf(m, "Espacio libre: %llu bytes\n", free_space);
+    return 0;
+}
+
+
+static int proc_open(struct inode *inode, struct file *file)
+{
+    return single_open(file, proc_show, NULL);
+}
+
+
+static const struct proc_ops proc_fops = {
+    .proc_open = proc_open,
+    .proc_read = seq_read,
+    .proc_lseek = seq_lseek,
+    .proc_release = single_release,
+};
+
+
+static int __init disk_stats_init(void)
+{
+
+    proc_entry = proc_create(PROC_FILENAME, 0, NULL, &proc_fops);
+    if (!proc_entry) {
+        pr_err("[%s] No se pudo crear /proc/%s\n", MODULE_NAME, PROC_FILENAME);
+        return -ENOMEM;
+    }
+
+    pr_info("[%s] Módulo cargado correctamente.\n", MODULE_NAME);
+    return 0;
+}
+
+
+static void __exit disk_stats_exit(void)
+{
+
+    proc_remove(proc_entry);
+    pr_info("[%s] Módulo descargado correctamente.\n", MODULE_NAME);
+}
+
+module_init(disk_stats_init);
+module_exit(disk_stats_exit);
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR(AUTHOR);
+MODULE_DESCRIPTION(DESCRIPTION);
+MODULE_VERSION("1.0");
+```
+
+- **Estadísticas del disco:** Obtiene información del sistema de archivos del punto de montaje `/` utilizando las funciones `kern_path` y `vfs_statfs`.
+
+- **Datos obtenidos:** Calcula el espacio total y el espacio libre en bytes multiplicando el tamaño de bloque (`f_bsize`) por el número de bloques totales (`f_blocks`) y bloques libres (`f_bfree`).
+
+- **Archivo `/proc/disk_stats`:** Crea un archivo en el sistema de proc para mostrar estas estadísticas cuando se lee con herramientas como `cat`.
+
+- **Formato de salida:** Incluye el punto de montaje, el espacio total y el espacio libre, formateados y enviados al archivo virtual usando `seq_printf`.
+
+- **Carga y limpieza:** Al cargar el módulo, crea `/proc/disk_stats`. Al descargarlo, elimina este archivo usando `proc_remove`.
+
+### Salida del módulo
+
+![](assets/2024-12-14-20-12-12-image.png)
+
+# 5. Pruebas realizadas para el funcionamiento de las syscalls
+
+Mediante 3 archivos de C, se probaron cada una de las syscalls, estos archivos se pueden encontrar en: <a href="Pruebas/">Ir a pruebas</a>
+
+A continuación solo se mostrará la salida y prueba de cada una de las syscalls.
+
+## Syscall1 (capture_memory_snapshot)
+
+![](assets/2024-12-14-20-20-45-image.png)
+
+- **Páginas activas e inactivas**:
+  
+  - Las *páginas activas* son aquellas que se han utilizado recientemente y que el sistema operativo mantiene en memoria porque es probable que sean necesarias nuevamente pronto.
+  - Las *páginas inactivas* son menos recientes y pueden ser candidatas para ser desplazadas al disco (swap) si el sistema necesita liberar memoria. Esto ayuda a gestionar eficientemente la memoria disponible.
+
+- **Error de "stack smashing detected"**:  
+  Este error ocurre cuando se detecta una corrupción en la pila del programa, generalmente debido a un desbordamiento de buffer (stack overflow). El sistema aborta la ejecución como medida de seguridad para evitar posibles exploits. Para resolverlo, revisa cuidadosamente el código en busca de operaciones que sobrescriban la memoria, como usar buffers sin verificar límites
+
+## Syscall2 (sys_track_usage)
+
+![](assets/2024-12-14-20-23-07-image.png)
+
+## Syscall3(get_io_throttle)
+
+![](assets/2024-12-14-20-24-44-image.png)
+
+Devuelve una lista de procesos, y el tiempo en espera en I/O.
+
+- **Bytes leídos**: Representan la cantidad de datos que el proceso ha leído desde el disco o dispositivos de almacenamiento durante su ejecución. Esto incluye archivos, configuraciones, etc.
+
+- **Bytes escritos**: Indican la cantidad de datos que el proceso ha escrito en el disco o dispositivos de almacenamiento. Esto incluye guardar archivos, registros (logs), y cualquier dato persistente.
+
+- **Bytes cancelados**: Son operaciones de escritura que el proceso inició pero finalmente no completó. Esto podría suceder si se decide liberar memoria, descartar un archivo temporal, o cancelar una operación antes de finalizar.
+
+- **Tiempo de espera de I/O (Input/Output)**: Mide el tiempo (en microsegundos) que un proceso pasó esperando a que las operaciones de entrada/salida se completaran, como leer o escribir en un disco.
+
+# Reflexión personal
+
+Este proyecto me mostró como funciona el kernel, no obstante algunas funciones no se realizaron correctamente debido a la complejidad que puede tener este a la hora de querer realizar ciertas modificaciones, y la documentación es un tanto diferente ha  aprender un nuevo lenguaje como python, java, etc. Pero aprendí a implementar syscalls desde el espacio del kernel, y así mismo poder probar su funcionamiento. Fue un proyecto un tanto complejo, pero aprendí nuevas cosas que nunca había visto durante la carrera, y eso me ayuda a mejorar muchas cosas y a cada día poder crecer como un futuro ingeniero.
