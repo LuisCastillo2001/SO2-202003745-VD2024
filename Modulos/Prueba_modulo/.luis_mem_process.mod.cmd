@@ -1,0 +1,1 @@
+savedcmd_/home/luis/Escritorio/SO2-202003745-VD2024/Modulos/Prueba_modulo/luis_mem_process.mod := printf '%s\n'   luis_mem_process.o | awk '!x[$$0]++ { print("/home/luis/Escritorio/SO2-202003745-VD2024/Modulos/Prueba_modulo/"$$0) }' > /home/luis/Escritorio/SO2-202003745-VD2024/Modulos/Prueba_modulo/luis_mem_process.mod

@@ -4,6 +4,11 @@
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
+#include <linux/mm.h>
+#include <linux/slab.h>
+#include <linux/uaccess.h>
+#include <linux/syscalls.h>
+#include <linux/mman.h>
 
 #include <linux/export.h>
 #include <linux/mm.h>
@@ -52,7 +57,12 @@
 #include <linux/user_namespace.h>
 #include <linux/time_namespace.h>
 #include <linux/binfmts.h>
-
+#include <linux/mm.h>
+#include <linux/mman.h>
+#include <linux/slab.h>
+#include <linux/uaccess.h>
+#include <linux/syscalls.h>
+#include <linux/mutex.h>
 #include <linux/sched.h>
 #include <linux/sched/autogroup.h>
 #include <linux/sched/loadavg.h>
@@ -72,7 +82,11 @@
 #include <linux/uaccess.h>
 #include <linux/jiffies.h>
 #include <linux/nospec.h>
-
+#include <linux/mm.h>
+#include <linux/slab.h>
+#include <linux/uaccess.h>
+#include <linux/syscalls.h>
+#include <linux/mman.h>
 #include <linux/kmsg_dump.h>
 /* Move somewhere else to avoid recompiling? */
 #include <generated/utsrelease.h>
@@ -3021,7 +3035,59 @@ SYSCALL_DEFINE1(luis_get_io_throttle, struct all_io_stats __user *, user_stats)
     }
 
     return 0;
-}
+};
+
+SYSCALL_DEFINE2(luis_tamalloc, size_t, size, unsigned long __user *, addr)
+{
+    unsigned long user_addr;
+
+    
+    size = PAGE_ALIGN(size);
+
+    
+    user_addr = vm_mmap(NULL, 0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0);
+    if (IS_ERR_VALUE(user_addr)) {
+        return user_addr;
+    }
+
+    // Copiar la dirección de memoria asignada al espacio de usuario
+    if (copy_to_user(addr, &user_addr, sizeof(user_addr))) {
+        vm_munmap(user_addr, size);
+        return -EFAULT;
+    }
+
+    return 0;
+};
+
+
+
+static vm_fault_t tamalloc_page_fault_handler(struct vm_fault *vmf)
+{
+    struct page *page;
+    void *page_addr;
+
+    
+    page = alloc_page(GFP_KERNEL);
+    if (!page)
+        return VM_FAULT_OOM;
+
+    
+    page_addr = page_address(page);
+    memset(page_addr, 0, PAGE_SIZE);
+
+   
+    vmf->page = page;
+
+    return 0;
+};
+
+static const struct vm_operations_struct tamalloc_vm_ops = {
+    .fault = tamalloc_page_fault_handler,
+};
+
+
+
+
 
 #ifdef CONFIG_COMPAT
 struct compat_sysinfo {
