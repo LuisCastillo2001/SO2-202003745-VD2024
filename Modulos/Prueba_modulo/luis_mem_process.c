@@ -1,12 +1,13 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
-#include <linux/proc_fs.h>
-#include <linux/seq_file.h>
-#include <linux/mm.h>
 #include <linux/sched.h>
 #include <linux/sched/signal.h>
 #include <linux/uaccess.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
+#include <linux/mm.h>
+#include <linux/swap.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Luis Castillo");
@@ -26,12 +27,13 @@ static int meminfo_show(struct seq_file *m, void *v) {
     struct task_struct *task;
 
     si_meminfo(&si);
-    unsigned long total_reserved = si.totalram * 4; 
+    unsigned long total_reserved = si.totalram * 4; // Convertir páginas a KB
 
     seq_printf(m, "Total Reserved Memory (KB): %lu\n", total_reserved);
-    seq_printf(m, "+-------+-----------------+---------------------+-------------------+--------------+\n");
-    seq_printf(m, "|  PID |       Name      | Reserved Memory(KB) | Committed Memory(KB) | Mem Usage (%) |\n");
-    seq_printf(m, "+-------+-----------------+---------------------+-------------------+--------------+\n");
+    seq_printf(m, "\033[1;36m+-------+-----------------+---------------------+---------------------+--------------+---------------+\033[0m\n");
+seq_printf(m, "\033[1;36m|  PID  |       Name      | Reserved Memory(KB) | Committed Memory(KB) | Mem Usage (%%) | OOM Score Adj |\033[0m\n");
+seq_printf(m, "\033[1;36m+-------+-----------------+---------------------+---------------------+--------------+---------------+\033[0m\n");
+
 
     for_each_process(task) {
         if (target_pid != 0 && task->pid != target_pid) {
@@ -42,21 +44,22 @@ static int meminfo_show(struct seq_file *m, void *v) {
         unsigned long rss = 0;
         unsigned long mem_usage = 0;
         long oom_score_adj = 0;
+        struct mm_struct *mm = task->mm;
 
-        if (task->mm) {
-            vsz = task->mm->total_vm << (PAGE_SHIFT - 10);
-            rss = get_mm_rss(task->mm) << (PAGE_SHIFT - 10);
-            mem_usage = calculate_percentage(rss, vsz);
+        if (mm) {
+            vsz = mm->total_vm << (PAGE_SHIFT - 10); 
+            rss = get_mm_rss(mm) << (PAGE_SHIFT - 10);
+            mem_usage = calculate_percentage(rss, total_reserved);
         }
 
         oom_score_adj = task->signal->oom_score_adj;
 
-        seq_printf(m, "| %5d | %-15s | %19lu | %19lu | %12lu.%02lu |\n",
-                   task->pid, task->comm, vsz, rss, mem_usage / 100, mem_usage % 100);
+        seq_printf(m, "| %5d | %-15s | %19lu | %19lu | %11lu.%02lu%% | %13ld |\n",
+                   task->pid, task->comm, vsz, rss, 
+                   mem_usage / 100, mem_usage % 100, oom_score_adj);
     }
 
-    seq_printf(m, "+-------+-----------------+---------------------+-------------------+--------------+\n");
-
+    seq_printf(m, "+-------+-----------------+---------------------+---------------------+--------------+---------------+\n");
     return 0;
 }
 
@@ -107,4 +110,3 @@ static void __exit meminfo_exit(void) {
 
 module_init(meminfo_init);
 module_exit(meminfo_exit);
-

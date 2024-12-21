@@ -1,1 +1,0 @@
-savedcmd_/home/luis/Escritorio/SO2-202003745-VD2024/Modulos/tamalloc/test_tamalloc.mod := printf '%s\n'   test_tamalloc.o | awk '!x[$$0]++ { print("/home/luis/Escritorio/SO2-202003745-VD2024/Modulos/tamalloc/"$$0) }' > /home/luis/Escritorio/SO2-202003745-VD2024/Modulos/tamalloc/test_tamalloc.mod
