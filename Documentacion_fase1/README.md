@@ -987,6 +987,30 @@ Devuelve una lista de procesos, y el tiempo en espera en I/O.
 
 - **Tiempo de espera de I/O (Input/Output)**: Mide el tiempo (en microsegundos) que un proceso pasó esperando a que las operaciones de entrada/salida se completaran, como leer o escribir en un disco.
 
+# 5. Cronograma de actividades
+
+| **Fecha**    | **Actividad**                                                                       |
+| ------------ | ----------------------------------------------------------------------------------- |
+| Martes 10    | Inicio del proyecto. Implementación de la primera syscall.                          |
+| Miércoles 11 | Desarrollo de la segunda syscall.                                                   |
+| Jueves 12    | Implementación de la tercera syscall.                                               |
+| Viernes 13   | Pruebas realizadas para las syscalls y los módulos del kernel.                      |
+| Sábado 14    | Inicio de la documentación final, incluyendo pasos seguidos y capturas de pantalla. |
+
+# 6. Errores encontrados al momento de realizar el proyecto
+
+## **Error de "stack smashing detected"**:
+
+Este error ocurre cuando se detecta una corrupción en la pila del programa, generalmente debido a un desbordamiento de buffer (stack overflow). El sistema aborta la ejecución como medida de seguridad para evitar posibles exploits. Para resolverlo, revisa cuidadosamente el código en busca de operaciones que sobrescriban la memoria, como usar buffers sin verificar límites.
+
+A pesar de obtener este error no supe como resolverlo, no obstante la llamada al sistema seguía haciendose correctamente, este error no afecto al funcionamiento de la primera llamada al sistema.
+
+## Error de bad adress
+
+El error **"Bad Address"** en Linux Mint ocurre cuando un programa intenta acceder a una dirección de memoria inválida o no permitida. Esto puede suceder si una syscall personalizada o una función del espacio de usuario intenta leer o escribir en una región de memoria a la que no tiene acceso.
+
+En este caso, el problema se solucionó asegurándose de dar el tamaño adecuado al `char array` utilizado para manejar la fecha en la primera syscall.
+
 # Reflexión personal
 
 Este proyecto me mostró como funciona el kernel, no obstante algunas funciones no se realizaron correctamente debido a la complejidad que puede tener este a la hora de querer realizar ciertas modificaciones, y la documentación es un tanto diferente ha  aprender un nuevo lenguaje como python, java, etc. Pero aprendí a implementar syscalls desde el espacio del kernel, y así mismo poder probar su funcionamiento. Fue un proyecto un tanto complejo, pero aprendí nuevas cosas que nunca había visto durante la carrera, y eso me ayuda a mejorar muchas cosas y a cada día poder crecer como un futuro ingeniero.
