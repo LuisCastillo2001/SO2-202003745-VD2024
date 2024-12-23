@@ -5,7 +5,7 @@
 #include <errno.h>
 #include <time.h>
 
-#define SYS_luis_tamalloc 551 // Asegúrate de que este número coincida con el de syscall64.tbl
+#define SYS_luis_tamalloc 551 
 
 int main() {
     printf("Program for tamalloc PID: %d\n", getpid());
@@ -16,7 +16,7 @@ int main() {
     size_t total_size = 10 * 1024 * 1024; // 10 MB
     unsigned long addr;
 
-    // Invocar la syscall luis_tamalloc
+   
     long result = syscall(SYS_luis_tamalloc, total_size, &addr);
     if (result != 0) {
         perror("syscall luis_tamalloc failed");
@@ -31,7 +31,7 @@ int main() {
 
     srand(time(NULL));
 
-    // Leer memoria byte por byte y verificar que esté inicializada a cero
+    
     for (size_t i = 0; i < total_size; i++) {
         char t = buffer[i]; // triggers lazy allocation (with zeroing :D )
         if (t != 0) {
@@ -39,7 +39,7 @@ int main() {
             return 10;
         }
 
-        // Escribir un carácter aleatorio de A-Z para desencadenar CoW
+        
         char random_letter = 'A' + (rand() % 26);
         buffer[i] = random_letter;
 

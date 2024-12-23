@@ -3045,7 +3045,7 @@ SYSCALL_DEFINE2(luis_tamalloc, size_t, size, unsigned long __user *, addr)
     size = PAGE_ALIGN(size);
 
     
-    user_addr = vm_mmap(NULL, 0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0);
+    user_addr = vm_mmap(NULL, 0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, 0);
     if (IS_ERR_VALUE(user_addr)) {
         return user_addr;
     }
