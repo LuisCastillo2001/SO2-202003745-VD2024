@@ -1,0 +1,1 @@
+savedcmd_/home/luis/Escritorio/SO2-202003745-VD2024/Modulos/all_process/modules.order := {   echo /home/luis/Escritorio/SO2-202003745-VD2024/Modulos/all_process/luis_mem_info.o; :; } > /home/luis/Escritorio/SO2-202003745-VD2024/Modulos/all_process/modules.order

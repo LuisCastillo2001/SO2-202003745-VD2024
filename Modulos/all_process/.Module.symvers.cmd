@@ -1,0 +1,1 @@
+savedcmd_/home/luis/Escritorio/SO2-202003745-VD2024/Modulos/all_process/Module.symvers :=  scripts/mod/modpost -M -m -a      -o /home/luis/Escritorio/SO2-202003745-VD2024/Modulos/all_process/Module.symvers -T /home/luis/Escritorio/SO2-202003745-VD2024/Modulos/all_process/modules.order -i Module.symvers -e 
