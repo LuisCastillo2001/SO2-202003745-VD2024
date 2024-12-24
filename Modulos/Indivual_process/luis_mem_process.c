@@ -30,10 +30,9 @@ static int meminfo_show(struct seq_file *m, void *v) {
     unsigned long total_reserved = si.totalram * 4; // Convertir páginas a KB
 
     seq_printf(m, "Total Reserved Memory (KB): %lu\n", total_reserved);
-    seq_printf(m, "\033[1;36m+-------+-----------------+---------------------+---------------------+--------------+---------------+\033[0m\n");
-seq_printf(m, "\033[1;36m|  PID  |       Name      | Reserved Memory(KB) | Committed Memory(KB) | Mem Usage (%%) | OOM Score Adj |\033[0m\n");
-seq_printf(m, "\033[1;36m+-------+-----------------+---------------------+---------------------+--------------+---------------+\033[0m\n");
-
+    seq_printf(m, "+-------+-----------------+---------------------+---------------------+--------------+---------------+\n");
+    seq_printf(m, "|  PID  |       Name      | Reserved Memory(KB) | Committed Memory(KB) | Mem Usage (%%) | OOM Score Adj |\n");
+    seq_printf(m, "+-------+-----------------+---------------------+---------------------+--------------+---------------+\n");
 
     for_each_process(task) {
         if (target_pid != 0 && task->pid != target_pid) {
@@ -47,8 +46,8 @@ seq_printf(m, "\033[1;36m+-------+-----------------+---------------------+------
         struct mm_struct *mm = task->mm;
 
         if (mm) {
-            vsz = mm->total_vm << (PAGE_SHIFT - 10); 
-            rss = get_mm_rss(mm) << (PAGE_SHIFT - 10);
+            vsz = mm->total_vm << (PAGE_SHIFT - 10); // Convertir páginas a KB
+            rss = get_mm_rss(mm) << (PAGE_SHIFT - 10); // Convertir páginas a KB
             mem_usage = calculate_percentage(rss, total_reserved);
         }
 
@@ -59,7 +58,7 @@ seq_printf(m, "\033[1;36m+-------+-----------------+---------------------+------
                    mem_usage / 100, mem_usage % 100, oom_score_adj);
     }
 
-    seq_printf(m, "+-------+-----------------+---------------------+---------------------+--------------+---------------+\n");
+    seq_printf(m, "+-------+-----------------+---------------------+---------------------+-----------------+---------------+\n");
     return 0;
 }
 
