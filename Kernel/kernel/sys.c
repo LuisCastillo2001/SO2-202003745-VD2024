@@ -3064,22 +3064,18 @@ SYSCALL_DEFINE2(luis_tamalloc, size_t, size, unsigned long __user *, addr)
 static vm_fault_t tamalloc_page_fault_handler(struct vm_fault *vmf)
 {
     struct page *page;
-    void *page_addr;
 
     
-    page = alloc_page(GFP_KERNEL);
+    page = alloc_page(GFP_KERNEL | __GFP_ZERO);
     if (!page)
         return VM_FAULT_OOM;
 
-    
-    page_addr = page_address(page);
-    memset(page_addr, 0, PAGE_SIZE);
-
-   
+    // Asignar la página física al manejador de fallos
     vmf->page = page;
 
     return 0;
-};
+}
+
 
 static const struct vm_operations_struct tamalloc_vm_ops = {
     .fault = tamalloc_page_fault_handler,
