@@ -57,22 +57,18 @@ SYSCALL_DEFINE2(luis_tamalloc, size_t, size, unsigned long __user *, addr)
 static vm_fault_t tamalloc_page_fault_handler(struct vm_fault *vmf)
 {
     struct page *page;
-    void *page_addr;
 
 
-    page = alloc_page(GFP_KERNEL);
+    page = alloc_page(GFP_KERNEL | __GFP_ZERO);
     if (!page)
         return VM_FAULT_OOM;
 
-
-    page_addr = page_address(page);
-    memset(page_addr, 0, PAGE_SIZE);
-
-
+    // Asignar la página física al manejador de fallos
     vmf->page = page;
 
     return 0;
-};
+}
+
 
 static const struct vm_operations_struct tamalloc_vm_ops = {
     .fault = tamalloc_page_fault_handler,
@@ -113,30 +109,24 @@ A continuación se desglosará como se relacionan con tamalloc y que tan importa
 static vm_fault_t tamalloc_page_fault_handler(struct vm_fault *vmf)
 {
     struct page *page;
-    void *page_addr;
 
-    // Asignación de una nueva página de memoria
-    page = alloc_page(GFP_KERNEL);
+
+    page = alloc_page(GFP_KERNEL | __GFP_ZERO);
     if (!page)
-        return VM_FAULT_OOM;  // Error si no hay suficiente memoria
+        return VM_FAULT_OOM;
 
-    // Obtener la dirección de la página asignada
-    page_addr = page_address(page);
-    // Inicializar la página a cero
-    memset(page_addr, 0, PAGE_SIZE);
-
-    // Establecer la página en el fallo de página
+    // Asignar la página física al manejador de fallos
     vmf->page = page;
 
-    return 0;  // Indica que se manejó el fallo correctamente
-};
+    return 0;
+}
 ```
 
-**`tamalloc_page_fault_handler`**: Esta es la función que maneja el fallo de página. Cuando el proceso intenta acceder a una página de memoria que no ha sido inicializada, esta función:
+Esta es la función que maneja el fallo de página. Cuando el proceso intenta acceder a una página de memoria que no ha sido inicializada, esta función:
 
 1. Asigna una nueva **página de memoria** (usando **`alloc_page`**).
-2. **Inicializa** esta página con ceros (`memset`), como parte del comportamiento de `tamalloc` para asegurar que las páginas sean inicializadas solo cuando se acceden por primera vez.
-3. **Asocia** esta página recién asignada al fallo de página (`vmf->page`), lo que le dice al sistema que esta página ahora está disponible para el proceso.
+2. **Inicializa esta página a cero** usando el flag `__GFP_ZERO`, lo que garantiza que la página se asigne con todos sus bytes en cero.
+3. **Asocia esta página recién asignada al fallo de página** (`vmf->page`), lo que le dice al sistema que esta página ahora está disponible para el proceso.
 
 Si no hay suficiente memoria disponible para asignar una nueva página, la función devuelve un error **`VM_FAULT_OOM`** (fuera de memoria).
 
@@ -356,4 +346,10 @@ Mediante la realización de este proyecto, pude aprender muchas cosas nuevas, en
 
 - Como funciona la memoria dinámica.
 
-Debido a que nunca me había adentrado en temas de memoria y procesos, para mi este proyecto fue una buena oportunidad para poder aprender estos temas, y poder saber como funciona el sistema operativo en la gestión de procesos. Para mi este proyecto fue muy impresionante, también porque implementamos nuestro propio alojador de memoria, y como lo mencione anteriormente, esto me ayuda bastante a poder saber más sobre el basto mundo que hay en los temas del kernel,  fue un buen paso para poder aprender sobre el kernel de linux, y adquirir más conocimiento para poder formarme como el ingeniero que seré en un futuro.
+Debido a que nunca me había adentrado en temas de memoria y procesos, para mi este proyecto fue una buena oportunidad para poder aprender estos temas, y poder saber como funciona el sistema operativo en la gestión de procesos. Para mi este proyecto fue muy impresionante, también porque implementamos nuestro propio alojador de memoria, y como lo mencione anteriormente, esto me ayuda bastante a poder saber más sobre el basto mundo que hay en los temas del kernel,  fue un buen paso para poder aprender sobre el kernel de linux, y adquirir más conocimiento para poder formarme como el ingeniero que seré en un futuro. Además, este proyecto me permitió mejorar mis habilidades de programación a nivel del kernel, enfrentándome a errores  y aprendiendo a depurarlos, lo cual fue un gran reto para mí. Sin duda, aprender sobre nuevos temas para mi es muy motivador, siempre estoy abierto ha aprender nuevos temas sobre todo de cosas que no había profundizado mucho.
+
+## Referencias
+
+- [Linux kernel: is a re-assigned page frame cleared? - Stack Overflow](https://stackoverflow.com/questions/72096236/linux-kernel-is-a-re-assigned-page-frame-cleared)
+
+- http://www.cs.otago.ac.nz/cosc440/labs/lab05.pdfhttp://www.cs.otago.ac.nz/cosc440/labs/lab05.pdf
