@@ -199,3 +199,161 @@ Basado en la salida que compartiste, aquí hay un desglose de lo que sucede a un
 6. **Verificación final:**
    
    - Al final, el programa confirma que toda la memoria solicitada ha sido correctamente inicializada a cero y luego escrita.
+
+# Implementación de módulos del kernel
+
+Para cada proceso individual se implemento el siguiente módulo
+
+Para CADA proceso individual:
+
+- Memoria reservada (Reserved) (en KB/MB)
+
+- Memoria utilizada (Commited) (en KB/MB, y en % de memoria reservada)
+
+- OOM SCore
+
+Y otro módulo aparte para
+
+resumen de TODOS los procesos:
+
+- Memoria total reservada (Reserved) (en MB)
+
+- Memoria total utilizada (Commited) (en MB)
+
+A continuación se mostrarán capturas de como funciona cada uno de estos módulos.
+
+## Módulo individual por cada proceso
+
+El funcionamiento del módulo es el siguiente:
+
+```c
+static int meminfo_show(struct seq_file *m, void *v) {
+    struct sysinfo si;
+    struct task_struct *task;
+
+    si_meminfo(&si);
+    unsigned long total_reserved = si.totalram * 4; // Convertir páginas a KB
+
+    seq_printf(m, "Total Reserved Memory (KB): %lu\n", total_reserved);
+    seq_printf(m, "+-------+-----------------+---------------------+---------------------+--------------+---------------+\n");
+    seq_printf(m, "|  PID  |       Name      | Reserved Memory(KB) | Committed Memory(KB) | Mem Usage (%%) | OOM Score Adj |\n");
+    seq_printf(m, "+-------+-----------------+---------------------+---------------------+--------------+---------------+\n");
+
+    for_each_process(task) {
+        if (target_pid != 0 && task->pid != target_pid) {
+            continue;
+        }
+
+        unsigned long vsz = 0;
+        unsigned long rss = 0;
+        unsigned long mem_usage = 0;
+        long oom_score_adj = 0;
+        struct mm_struct *mm = task->mm;
+
+        if (mm) {
+            vsz = mm->total_vm << (PAGE_SHIFT - 10); // Convertir páginas a KB
+            rss = get_mm_rss(mm) << (PAGE_SHIFT - 10); // Convertir páginas a KB
+            mem_usage = calculate_percentage(rss, total_reserved);
+        }
+
+        oom_score_adj = task->signal->oom_score_adj;
+
+        seq_printf(m, "| %5d | %-15s | %19lu | %19lu | %11lu.%02lu%% | %13ld |\n",
+                   task->pid, task->comm, vsz, rss, 
+                   mem_usage / 100, mem_usage % 100, oom_score_adj);
+    }
+
+    seq_printf(m, "+-------+-----------------+---------------------+---------------------+-----------------+---------------+\n");
+    return 0;
+}
+
+static int meminfo_open(struct inode *inode, struct file *file) {
+    return single_open(file, meminfo_show, NULL);
+}
+
+static ssize_t meminfo_write(struct file *file, const char __user *buf, size_t count, loff_t *pos) {
+    char input[10];
+
+    if (count > 9) {
+        return -EINVAL;
+    }
+
+    if (copy_from_user(input, buf, count)) {
+        return -EFAULT;
+    }
+
+    input[count] = '\0';
+
+    if (input[0] == '0' && input[1] == '\0') {
+        target_pid = 0;
+    } else {
+        sscanf(input, "%d", &target_pid);
+    }
+
+    return count;
+}
+```
+
+- Este módulo del kernel proporciona un informe detallado del uso de memoria en el sistema, mostrando datos como memoria reservada, memoria comprometida, porcentaje de uso y el ajuste de puntuación OOM de cada proceso en un archivo virtual dentro del sistema de archivos `/proc`.
+
+- Recorre todos los procesos activos del sistema o filtra por un PID específico, calculando la memoria virtual total (VSS), memoria física usada (RSS) y el porcentaje de memoria utilizada en relación con la memoria total reservada. La información se presenta en una tabla formateada.
+
+- Los usuarios pueden interactuar escribiendo en el archivo un PID para filtrar los datos de un proceso específico o "0" para reiniciar y mostrar información de todos los procesos, permitiendo ajustar dinámicamente la consulta sin reiniciar el módulo.
+
+### Captura de funcionamiento del módulo
+
+Si se manda como parametro el número 0:
+
+![](assets/2024-12-24-18-33-08-image.png)
+
+### Funcionamiento en conjunto con tamalloc
+
+![](assets/2024-12-24-18-34-41-image.png)
+
+La memoria reservada y committed memory iran cambiando según el test de tamalloc lo solicite.
+
+## Módulo 2 (Resumen de todos los procesos)
+
+![](assets/2024-12-24-18-36-09-image.png)
+
+Este módulo es el encargado de realizar un resumen de todos los procesos y mostrar la memoria reservada y el committed memory de estos.
+
+#### Aclaraciones
+
+**¿ Por qué la memoria reservada es mayor que la ram de mi máquina virtual?**
+
+La suma de la memoria reservada (VSS) de todos los procesos es mayor que la RAM asignada porque el sistema operativo usa una técnica llamada *overcommit*, que permite a los procesos reservar más memoria virtual de la que realmente existe en RAM. Esto incluye memoria compartida (como bibliotecas que usan varios procesos), memoria mapeada a disco o swap, y áreas reservadas pero no usadas físicamente hasta que se acceden. Así, la memoria reservada refleja todo el espacio virtual asignado, mientras que solo una parte de esta está respaldada por RAM en uso (RSS).
+
+**¿Qué es la committed memory?**
+
+La **Committed Memory** es la cantidad de memoria que el sistema ha garantizado a los procesos y que está respaldada por recursos reales, ya sea en RAM o en swap. Representa la memoria que los procesos han solicitado y que el sistema operativo ha comprometido para su uso, asegurando que estará disponible cuando los procesos la necesiten. A diferencia de la memoria reservada (VSS), la committed memory incluye solo la memoria que se ha utilizado o está lista para ser utilizada, no el total de la memoria virtual asignada.
+
+## Errores encontrados
+
+- Encontré un error al usar `do_mmap` en mi syscall personalizada debido a que no pasaba correctamente los argumentos requeridos por esta función interna, lo que impedía la asignación de memoria. Para solucionarlo, lo reemplacé por `vm_mmap`, una función más accesible que encapsula la lógica de `do_mmap` y maneja la asignación de memoria en el espacio de usuario de forma más sencilla, aceptando parámetros como las protecciones de página, el tipo de mapeo y el tamaño alineado a páginas.
+
+- Durante las pruebas, encontré un error en el que los fallos de página no se manejaban correctamente, lo que causaba accesos inválidos y errores de segmentación cuando un proceso intentaba usar la memoria asignada con la syscall. El problema se debía a que, en el controlador de fallos de página (`tamalloc_page_fault_handler`), olvidé asignar la página creada al campo `vmf->page`. Esto impedía que el sistema asociara correctamente la página física con la dirección virtual que generó el fallo.
+
+## Cronograma para la realización del proyecto
+
+| **Fecha**    | **Actividad**                                                               |
+| ------------ | --------------------------------------------------------------------------- |
+| Jueves 19    | Investigación de como funciona malloc y que es un alojador de memoria en C. |
+| Viernes 20   | Implementación de tamalloc.                                                 |
+| Sábado 21    | Verificación del funcionamiento de tamalloc y arreglo de algunos errores.   |
+| Domingo 22   | Pruebas y realización de los 2 módulos del kernel.                          |
+| Lunes 23     | Inicio de la documentación y arreglo de algunos detalles.                   |
+| Martes 24    | Finalización de la documentación.                                           |
+| Miércoles 25 | Feliz navidad :christmas_tree:                                              |
+
+# Reflexión personal
+
+Mediante la realización de este proyecto, pude aprender muchas cosas nuevas, entre ellas están las siguientes:
+
+- Como funciona un alojador de memoria.
+
+- Que es el overcommit, y que los procesos suelen reservar espacio pero no usarlo todo en su totalidad.
+
+- Como funciona la memoria dinámica.
+
+Debido a que nunca me había adentrado en temas de memoria y procesos, para mi este proyecto fue una buena oportunidad para poder aprender estos temas, y poder saber como funciona el sistema operativo en la gestión de procesos. Para mi este proyecto fue muy impresionante, también porque implementamos nuestro propio alojador de memoria, y como lo mencione anteriormente, esto me ayuda bastante a poder saber más sobre el basto mundo que hay en los temas del kernel,  fue un buen paso para poder aprender sobre el kernel de linux, y adquirir más conocimiento para poder formarme como el ingeniero que seré en un futuro.
