@@ -30,9 +30,9 @@ static int meminfo_show(struct seq_file *m, void *v) {
     unsigned long total_reserved = si.totalram * 4; // Convertir páginas a KB
 
     seq_printf(m, "Total Reserved Memory (KB): %lu\n", total_reserved);
-    seq_printf(m, "+-------+-----------------+---------------------+---------------------+--------------+---------------+\n");
-    seq_printf(m, "|  PID  |       Name      | Reserved Memory(KB) | Committed Memory(KB) | Mem Usage (%%) | OOM Score Adj |\n");
-    seq_printf(m, "+-------+-----------------+---------------------+---------------------+--------------+---------------+\n");
+    seq_printf(m, "+-------+-----------------+---------------------+----------------------+----------------+---------------+\n");
+    seq_printf(m, "|  PID  |       Name      | Reserved Memory(KB) | Committed Memory(KB) | Mem Usage (%%)  | OOM Score Adj |\n");
+    seq_printf(m, "+-------+-----------------+---------------------+----------------------+----------------+---------------+\n");
 
     for_each_process(task) {
         if (target_pid != 0 && task->pid != target_pid) {
@@ -58,7 +58,7 @@ static int meminfo_show(struct seq_file *m, void *v) {
                    mem_usage / 100, mem_usage % 100, oom_score_adj);
     }
 
-    seq_printf(m, "+-------+-----------------+---------------------+---------------------+-----------------+---------------+\n");
+    seq_printf(m, "+-------+-----------------+---------------------+----------------------+----------------+---------------+\n");
     return 0;
 }
 
