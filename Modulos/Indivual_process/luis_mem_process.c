@@ -19,7 +19,7 @@ MODULE_VERSION("1.0");
 static int target_pid = 0;
 
 static unsigned long calculate_percentage(unsigned long part, unsigned long total) {
-    return total ? (part * 10000 / total) : 0;
+    return total ? (part * 100 / total) : 0;
 }
 
 static int meminfo_show(struct seq_file *m, void *v) {
@@ -48,14 +48,16 @@ static int meminfo_show(struct seq_file *m, void *v) {
         if (mm) {
             vsz = mm->total_vm << (PAGE_SHIFT - 10); // Convertir páginas a KB
             rss = get_mm_rss(mm) << (PAGE_SHIFT - 10); // Convertir páginas a KB
-            mem_usage = calculate_percentage(rss, total_reserved);
+            mem_usage = calculate_percentage(rss * 100, vsz);
         }
 
         oom_score_adj = task->signal->oom_score_adj;
 
         seq_printf(m, "| %5d | %-15s | %19lu | %19lu | %11lu.%02lu%% | %13ld |\n",
-                   task->pid, task->comm, vsz, rss, 
-                   mem_usage / 100, mem_usage % 100, oom_score_adj);
+           task->pid, task->comm, vsz, rss, 
+           mem_usage / 100, mem_usage % 100, // Parte entera y decimal del porcentaje
+           oom_score_adj);
+
     }
 
     seq_printf(m, "+-------+-----------------+---------------------+----------------------+----------------+---------------+\n");
