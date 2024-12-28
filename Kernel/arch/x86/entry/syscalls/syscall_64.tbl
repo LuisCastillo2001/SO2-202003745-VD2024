@@ -432,3 +432,5 @@
 549 common luis_track_syscall_usage sys_luis_track_syscall_usage
 550 common luis_get_io_throttle sys_luis_get_io_throttle
 551 common luis_tamalloc sys_luis_tamalloc
+#
+557    common    luis_add_memory_limit    sys_luis_add_memory_limit

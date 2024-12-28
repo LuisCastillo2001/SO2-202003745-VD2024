@@ -9,7 +9,7 @@
 #include <linux/uaccess.h>
 #include <linux/syscalls.h>
 #include <linux/mman.h>
-
+#include <linux/resource.h>
 #include <linux/export.h>
 #include <linux/mm.h>
 #include <linux/mm_inline.h>
@@ -106,6 +106,12 @@
 #include <linux/rcupdate.h>
 #include <linux/init_task.h>
 #include "uid16.h"
+#include <linux/slab.h> 
+#include <linux/syscalls.h>
+#include <linux/errno.h>
+#include <linux/sched.h>
+#include <linux/uaccess.h>
+#include <linux/capability.h>  
 #define MAX_PROCS 20
 #ifndef SET_UNALIGN_CTL
 # define SET_UNALIGN_CTL(a, b)	(-EINVAL)
@@ -3083,7 +3089,109 @@ static const struct vm_operations_struct tamalloc_vm_ops = {
 
 
 
+// Fase 3
 
+
+
+struct memory_limit_node {
+    pid_t pid;
+    size_t memory_limit;
+    struct memory_limit_node *next;
+};
+
+
+static struct memory_limit_node *memory_limit_head = NULL;
+
+// Función para buscar un nodo por PID
+static struct memory_limit_node *find_node_by_pid(pid_t pid) {
+    struct memory_limit_node *current_node = memory_limit_head;
+
+    while (current_node) {
+        if (current_node->pid == pid) {
+            return current_node; // Nodo encontrado
+        }
+        current_node = current_node->next;
+    }
+
+    return NULL; // Nodo no encontrado
+}
+
+// Función para obtener el uso actual de memoria del proceso
+static size_t get_process_memory_usage(struct task_struct *task) {
+    struct mm_struct *mm;
+    size_t memory_usage = 0;
+
+    mm = get_task_mm(task);
+    if (mm) {
+        memory_usage = mm->total_vm << PAGE_SHIFT; 
+        mmput(mm);
+    }
+    return memory_usage;
+}
+
+
+static int add_memory_limit_node(pid_t pid, size_t memory_limit) {
+    struct memory_limit_node *new_node;
+
+    // Verificar si ya existe un nodo con el mismo PID
+    if (find_node_by_pid(pid)) {
+        return -101; // Código de error personalizado: Nodo ya existe
+    }
+
+    // Asignar memoria para el nuevo nodo
+    new_node = kmalloc(sizeof(struct memory_limit_node), GFP_KERNEL);
+    if (!new_node) {
+        return -ENOMEM; // Error de memoria
+    }
+
+   
+    new_node->pid = pid;
+    new_node->memory_limit = memory_limit;
+    new_node->next = memory_limit_head; 
+
+   
+    memory_limit_head = new_node;
+
+    return 0; // Nodo agregado exitosamente
+}
+
+// Definición de la syscall
+SYSCALL_DEFINE2(luis_add_memory_limit, pid_t, process_pid, size_t, memory_limit) {
+    struct task_struct *task;
+    struct memory_limit_node *existing_node;
+    size_t current_memory_usage;
+
+    // Verificar si es un usuario con privilegios (sudoer)
+    if (!capable(CAP_SYS_ADMIN)) {
+        return -EPERM;
+    }
+
+    // Validar parámetros de entrada
+    if (process_pid <= 0 || memory_limit <= 0) {
+        return -EINVAL; // Argumento inválido
+    }
+
+    // Buscar si el proceso existe
+    task = find_task_by_vpid(process_pid);
+    if (!task) {
+        return -ESRCH; // Proceso no encontrado
+    }
+
+    // Verificar si ya existe un límite para el proceso
+    existing_node = find_node_by_pid(process_pid);
+    if (existing_node) {
+        return -101; // Proceso ya está en la lista
+    }
+
+    // Verificar si el proceso ya excede el límite de memoria
+    current_memory_usage = get_process_memory_usage(task);
+    if (current_memory_usage > memory_limit) {
+        return -100; // Límite excedido
+    }
+
+    
+    return add_memory_limit_node(process_pid, memory_limit);
+}
 
 #ifdef CONFIG_COMPAT
 struct compat_sysinfo {
