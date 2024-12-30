@@ -969,6 +969,7 @@ asmkinkage long sys_luis_track_syscall_usage(struct track_counters __user *track
 asmlinkage long sys_luis_get_io_throttle(struct all_io_stats __user *user_stats);
 asmlinkage long sys_luis_tamalloc(size_t size, unsigned long __user *addr);
 asmlinkage long sys_luis_add_memory_limit(pid_t process_pid, size_t memory_limit);
+asmlinkage long sys_luis_get_memory_limits(struct memory_limitation *u_processes_buffer, size_t max_entries, int *processes_returned);
 
 /*
  * Architecture-specific system calls
