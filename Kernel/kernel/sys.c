@@ -3252,6 +3252,14 @@ SYSCALL_DEFINE3(luis_get_memory_limits, struct memory_limitation*, u_processes_b
 }
 
 
+// Actualizar un limite de memoria
+
+SYSCALL_DEFINE2(luis_update_memory_limit, pid_t, process_pid, size_t, memory_limit){
+
+    return 0;
+}
+
+
 // Fin fase 3
 #ifdef CONFIG_COMPAT
 struct compat_sysinfo {
