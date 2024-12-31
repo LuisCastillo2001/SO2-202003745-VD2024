@@ -7,14 +7,18 @@
 #define SYS_LUIS_ADD_MEMORY_LIMIT 557
 #define SYS_LUIS_GET_MEMORY_LIMITS 558
 #define SYS_LUIS_UPDATE_MEMORY_LIMIT 559
+#define SYS_LUIS_REMOVE_MEMORY_LIMIT 560
 
 struct memory_limitation {
 	pid_t pid;
 	size_t memory_limit;
 };
 
+
 void add_memory_limit(pid_t pid, size_t memory_limit) {
-	if (syscall(SYS_LUIS_ADD_MEMORY_LIMIT, pid, memory_limit) < 0) {
+	//TODO Chequeo de errores como en el enunciado
+
+	if (syscall(SYS_LUIS_ADD_MEMORY_LIMIT, pid, memory_limit) != 0) {  //FIXME != 0
 		perror("SYS_LUIS_ADD_MEMORY_LIMIT");
 		return;
 	}
@@ -31,13 +35,13 @@ void get_memory_limits(size_t max_entries) {
 		return;
 	}
 
-	if (syscall(SYS_LUIS_GET_MEMORY_LIMITS, buffer, max_entries, &processes_returned) < 0) {
+	if (syscall(SYS_LUIS_GET_MEMORY_LIMITS, buffer, max_entries, &processes_returned) != 0) {  //FIXME != 0
 		perror("SYS_LUIS_GET_MEMORY_LIMITS");
 		free(buffer);
 		return;
 	}
 
-	printf("Restricted processes memory successfully:\n");
+	printf("Restricted proccesses memory succesfully:\n");
 	for (int i = 0; i < processes_returned; ++i) {
 		printf("PID: %d, Memory Limit: %zu bytes\n", buffer[i].pid, buffer[i].memory_limit);
 	}
@@ -45,14 +49,26 @@ void get_memory_limits(size_t max_entries) {
 }
 
 void update_memory_limit(pid_t pid, size_t memory_limit) {
-	if (syscall(SYS_LUIS_UPDATE_MEMORY_LIMIT, pid, memory_limit) < 0) {
+	if (syscall(SYS_LUIS_UPDATE_MEMORY_LIMIT, pid,  memory_limit) != 0) {  //FIXME != 0
 		perror("SYS_LUIS_UPDATE_MEMORY_LIMIT");
 		return;
 	}
 	printf("Memory limit for PID %d updated to %zu \n", pid, memory_limit);
 }
 
+
+void remove_memory_limit(pid_t pid) {
+	if (syscall(SYS_LUIS_REMOVE_MEMORY_LIMIT, pid) != 0) {  //FIXME != 0
+		perror("SYS_LUIS_REMOVE_MEMORY_LIMIT");
+		return;
+	}
+	printf("Memory limit for PID %d removed\n", pid);
+}
+
+
+
 int main() {
+
 	int choice;
 	pid_t pid;
 	size_t memory_limit;
@@ -64,7 +80,8 @@ int main() {
 		printf("1. Add Memory Limit\n");
 		printf("2. Get Memory Limit\n");
 		printf("3. Update Memory Limit\n");
-		printf("4. Exit\n");
+		printf("4. Remove Memory Limit\n");
+		printf("5. Exit\n");
 
 		printf("Enter a number option to proceed\n");
 		scanf("%d", &choice);
@@ -94,6 +111,11 @@ int main() {
 				update_memory_limit(pid, memory_limit);
 				break;
 			case 4:
+				printf("Enter PID to remove limit:");
+				scanf("%d", &pid);
+				remove_memory_limit(pid);
+				break;
+			case 5:
 				printf("Exiting...\n");
 				return 0;
 				break;

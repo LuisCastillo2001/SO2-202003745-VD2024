@@ -436,3 +436,4 @@
 557    common    luis_add_memory_limit    sys_luis_add_memory_limit
 558    common    luis_get_memory_limits   sys_luis_get_memory_limits
 559    common    luis_update_memory_limit sys_luis_update_memory_limit
+560    common    luis_remove_memory_limit sys_luis_remove_memory_limit

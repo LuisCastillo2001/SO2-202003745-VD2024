@@ -127,15 +127,30 @@ SYSCALL_DEFINE2(luis_add_memory_limit, pid_t, process_pid, size_t, memory_limit)
     return add_memory_limitation_node(process_pid, memory_limit);
 }
 
-// Definición de la syscall para obtener los límites de memoria
+
+
 SYSCALL_DEFINE3(luis_get_memory_limits, struct memory_limitation*, u_processes_buffer, size_t, max_entries, int*, processes_buffer_size) {
     struct memory_limitation_list *entry; 
     int count = 0;
-    
-    struct memory_limitation* k_processes_buffer = kmalloc_array(max_entries, sizeof(struct memory_limitation), GFP_KERNEL);
-    if (!k_processes_buffer)
-        return -ENOMEM;
 
+    // Validar el valor de max_entries
+    if (max_entries <= 0) {
+        return -EINVAL;
+    }
+
+    // Validar los punteros de espacio de usuario
+    if (!access_ok(u_processes_buffer, max_entries * sizeof(struct memory_limitation)) ||
+        !access_ok(processes_buffer_size, sizeof(int))) {
+        return -EINVAL;
+    }
+
+    // Reservar memoria en espacio de kernel
+    struct memory_limitation* k_processes_buffer = kmalloc_array(max_entries, sizeof(struct memory_limitation), GFP_KERNEL);
+    if (!k_processes_buffer) {
+        return -ENOMEM;
+    }
+
+    // Llenar el buffer con las entradas de la lista
     list_for_each_entry(entry, &memory_limitation_head, list) {  
         if (count >= max_entries) {
             break;
@@ -145,17 +160,21 @@ SYSCALL_DEFINE3(luis_get_memory_limits, struct memory_limitation*, u_processes_b
         count++;
     }
 
+    // Copiar el buffer al espacio de usuario
     if (copy_to_user(u_processes_buffer, k_processes_buffer, count * sizeof(struct memory_limitation))) {
         kfree(k_processes_buffer);
         return -EFAULT;
     }
 
+    // Liberar memoria y establecer processes_buffer_size
     kfree(k_processes_buffer);
-    *processes_buffer_size = count;
 
-    return 0;
+    if (put_user(count, processes_buffer_size)) {
+        return -EFAULT;
+    }
+
+    return 0; // Éxito
 }
-
 // Definición de la syscall para actualizar el límite de memoria
 SYSCALL_DEFINE2(luis_update_memory_limit, pid_t, process_pid, size_t, memory_limit) {
     struct task_struct *task;
@@ -200,4 +219,52 @@ SYSCALL_DEFINE2(luis_update_memory_limit, pid_t, process_pid, size_t, memory_lim
 
     return 0; // Éxito
 }
+
+
+// Remover el limite de un proceso
+SYSCALL_DEFINE1(luis_remove_memory_limit, pid_t, process_pid) {
+    struct task_struct *task;
+    struct memory_limitation_list *node;
+    int ret;
+
+    // Verificar permisos
+    if (!capable(CAP_SYS_ADMIN)) {
+        return -EPERM;
+    }
+
+    // Validar el argumento del PID
+    if (process_pid <= 0) {
+        return -EINVAL;
+    }
+
+    // Buscar el proceso por PID
+    task = find_task_by_vpid(process_pid);
+    if (!task) {
+        
+        return -ESRCH; // Proceso no encontrado
+    }
+
+    // Verificar si el proceso está en la lista
+    node = find_node_by_pid(process_pid);
+    if (!node) {
+        return -102;
+    }
+
+    
+    ret = set_process_memory_limit(task, 60 * 1024 * 1024); 
+    if (ret) {
+        return ret;
+    }
+
+    
+    list_del(&node->list);
+    kfree(node);
+
+    return 0; // Éxito
+}
+
+
+
+
+
 
