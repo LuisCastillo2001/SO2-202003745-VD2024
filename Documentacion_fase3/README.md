@@ -503,3 +503,56 @@ SYSCALL_DEFINE1(luis_remove_memory_limit, pid_t, process_pid) {
 
 - Utiliza `list_del(&node->list)` para eliminar el nodo correspondiente del encabezado de la lista `memory_limitation_head`.
 - Luego, se libera la memoria del nodo con `kfree(node)`.
+
+## Pruebas realizadas para verificar el funcionamiento
+
+Para las pruebas, se tienen dos scripts, uno que es el alojador de memoria y otro que funciona para agregar los limites, para agregar limites será de la siguiente manera
+
+![](assets/2025-01-01-12-05-54-image.png)
+
+Se introduce el PID existente y después el limite de memoria que se desea asignar, si todo salio bien el alojador de memoria tiene que ser capaz de permitirnos alojar la memoria.
+
+![](assets/2025-01-01-12-07-06-image.png)
+
+Para obtener la lista de los limites establecidos, será con la opción 2 y lo devolverá de la siguiente manera
+
+![](assets/2025-01-01-12-08-51-image.png)
+
+Para actualizar el limite de un proceso es similar al de agregar, nos pedirá el PID y luego la cantidad del límite que queremos actualizar
+
+![](assets/2025-01-01-12-10-08-image.png)
+
+Para remover el límite solo tendremos que escribir el PID que deseamos
+
+![](assets/2025-01-01-12-11-11-image.png)
+
+## Errores encontrados
+
+### Network is down
+
+Este error me ocurria, cuando al proceso le trataba de asignar menos de lo que ya estaba usando cuando se inicializaba, por defecto el proceso cuando inicializa trae un tamaño aproximado de 2000kb y 2300kb, por lo tanto para la ejecución es necesario asignarle más memoria.
+
+### ¿ Por qué el límite de no cambiaba?
+
+ Al inicio me di cuenta que el límite no cambiaba, esto era debido a que no estaba haciendo ninguna modificación, investigando me di cuenta que había una función capaz de hacer esto que era la función de **do_prlimit**
+
+Información de la función: https://elixir.bootlin.com/linux/v6.12.6/C/ident/do_prlimit
+
+# Cronograma de actividades
+
+| **Fecha**   | **Actividad**                                                                   |
+| ----------- | ------------------------------------------------------------------------------- |
+| Viernes 27  | Investigación preeliminar acerca de listas enlazadas en C y límites de memoria. |
+| Sábado 28   | Implementación de la primera syscall                                            |
+| Domingo 29  | Implementación de la segunda y tercera syscall.                                 |
+| Lunes 30    | Implementación de la última syscall e inicio de pruebas.                        |
+| Martes 31   | Inicio de la documentación y arreglo de algunos detalles.                       |
+| Miércoles 1 | Finalización de la documentación.                                               |
+
+# Reflexión personal
+
+Para este último proyecto aprendí a realizar limites debido a que ciertos procesos a veces piden más de lo que necesitan, por lo tanto a veces es necesario limitar para no evitar esto en el comportamiento de los procesos. Fue muy anhelante también volver a utilizar una estructura de datos, como es la lista enlazada, debido a que me interesan mucho como funcionan las estructuras de datos y como estas se pueden aplicar en el mundo real. Y combinar estructuras de datos con un proyecto de limites de memoria para mi es bastante emocionante, debido a que se aprenden muchas cosas a la vez.
+
+Otro punto a detallar es que aprendí a como puedo separar las llamadas al sistema sin que esten implementadas todas en el sys.c, al principio esto me dio algo de miedo, por poder arruinar algo del kernel, pero después me di cuenta que es muy sencillo realizar esto, y además se tiene una mejor organización del kernel.
+
+En fin, este proyecto me gusto bastante, además de la importancia de poder manejar el kernel de Linux, este fue mi último proyecto del curso, un curso el cuál me gusto bastante, y aprendí cosas bastantes nuevas las cuales me ayudarán a seguir creciendo como ingeniero, y también como la persona que seré en el futuro.
