@@ -225,6 +225,7 @@ SYSCALL_DEFINE2(luis_update_memory_limit, pid_t, process_pid, size_t, memory_lim
 SYSCALL_DEFINE1(luis_remove_memory_limit, pid_t, process_pid) {
     struct task_struct *task;
     struct memory_limitation_list *node;
+    struct rlimit unlimited_rlimit;
     int ret;
 
     // Verificar permisos
@@ -251,7 +252,7 @@ SYSCALL_DEFINE1(luis_remove_memory_limit, pid_t, process_pid) {
     }
 
     
-    ret = set_process_memory_limit(task, 60 * 1024 * 1024); 
+    ret = set_process_memory_limit(task, 110 * 1024 * 1024); 
     if (ret) {
         return ret;
     }
