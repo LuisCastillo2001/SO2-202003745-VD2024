@@ -14,11 +14,11 @@ struct memory_limitation {
 };
 
 struct memory_limitation_list {
-    struct list_head list; // Encabezado de la lista
-    struct memory_limitation node; // Nodo con datos
+    struct list_head list; 
+    struct memory_limitation node; 
 };
 
-// Lista principal
+
 static LIST_HEAD(memory_limitation_head);
 
 // Función para establecer el límite de memoria de un proceso
@@ -57,7 +57,7 @@ static size_t get_process_memory_usage(struct task_struct *task) {
     return memory_usage;
 }
 
-// Función para agregar un nodo a la lista
+
 static int add_memory_limitation_node(pid_t pid, size_t memory_limit) {
     struct memory_limitation_list *new_entry;
 
@@ -72,7 +72,7 @@ static int add_memory_limitation_node(pid_t pid, size_t memory_limit) {
         return -ENOMEM; // Error de memoria
     }
 
-    // Inicializar la entrada
+   
     new_entry->node.pid = pid;
     new_entry->node.memory_limit = memory_limit;
     INIT_LIST_HEAD(&new_entry->list);
@@ -83,7 +83,7 @@ static int add_memory_limitation_node(pid_t pid, size_t memory_limit) {
     return 0; // Nodo agregado exitosamente
 }
 
-// Definición de la syscall para agregar un límite de memoria
+
 SYSCALL_DEFINE2(luis_add_memory_limit, pid_t, process_pid, size_t, memory_limit) {
     struct task_struct *task;
     struct memory_limitation_list *existing_node;
@@ -98,30 +98,29 @@ SYSCALL_DEFINE2(luis_add_memory_limit, pid_t, process_pid, size_t, memory_limit)
     // Validar argumentos
     if (process_pid <= 0 || memory_limit <= 0) {
         return -EINVAL; // Argumento inválido
-    }
 
     // Buscar el proceso por PID
     task = find_task_by_vpid(process_pid);
     if (!task) {
-        return -ESRCH; // Proceso no encontrado
+        return -ESRCH; 
     }
 
     // Verificar si ya existe el nodo en la lista
     existing_node = find_node_by_pid(process_pid);
     if (existing_node) {
-        return -101; // Proceso ya en la lista
+        return -101; 
     }
 
     // Verificar el uso actual de memoria
     current_memory_usage = get_process_memory_usage(task);
     if (current_memory_usage > memory_limit) {
-        return -100; // Límite excedido
+        return -100; 
     }
 
     // Establecer el límite de memoria
     ret = set_process_memory_limit(task, memory_limit);
     if (ret) {
-        return ret; // Error al establecer el límite
+        return ret; 
     }
 
     return add_memory_limitation_node(process_pid, memory_limit);
@@ -133,7 +132,7 @@ SYSCALL_DEFINE3(luis_get_memory_limits, struct memory_limitation*, u_processes_b
     struct memory_limitation_list *entry; 
     int count = 0;
 
-    // Validar el valor de max_entries
+    
     if (max_entries <= 0) {
         return -EINVAL;
     }
@@ -160,22 +159,22 @@ SYSCALL_DEFINE3(luis_get_memory_limits, struct memory_limitation*, u_processes_b
         count++;
     }
 
-    // Copiar el buffer al espacio de usuario
+   
     if (copy_to_user(u_processes_buffer, k_processes_buffer, count * sizeof(struct memory_limitation))) {
         kfree(k_processes_buffer);
         return -EFAULT;
     }
 
-    // Liberar memoria y establecer processes_buffer_size
+    
     kfree(k_processes_buffer);
 
     if (put_user(count, processes_buffer_size)) {
         return -EFAULT;
     }
 
-    return 0; // Éxito
+    return 0; 
 }
-// Definición de la syscall para actualizar el límite de memoria
+
 SYSCALL_DEFINE2(luis_update_memory_limit, pid_t, process_pid, size_t, memory_limit) {
     struct task_struct *task;
     struct memory_limitation_list *node;
@@ -188,13 +187,13 @@ SYSCALL_DEFINE2(luis_update_memory_limit, pid_t, process_pid, size_t, memory_lim
 
     // Validar argumentos
     if (process_pid <= 0 || memory_limit <= 0) {
-        return -EINVAL; // Argumento inválido
+        return -EINVAL; 
     }
 
     // Buscar el proceso por PID
     task = find_task_by_vpid(process_pid);
     if (!task) {
-        return -ESRCH; // Proceso no encontrado
+        return -ESRCH; 
     }
 
     // Verificar si el proceso está en la lista
@@ -205,23 +204,23 @@ SYSCALL_DEFINE2(luis_update_memory_limit, pid_t, process_pid, size_t, memory_lim
 
     // Verificar si el uso actual de memoria excede el nuevo límite
     if (get_process_memory_usage(task) > memory_limit) {
-        return -100; // Límite excedido
+        return -100; 
     }
 
     // Actualizar el límite de memoria con do_prlimit
     ret = set_process_memory_limit(task, memory_limit);
     if (ret) {
-        return ret; // Error al establecer el límite
+        return ret; 
     }
 
     // Actualizar el límite en la lista
     node->node.memory_limit = memory_limit;
 
-    return 0; // Éxito
+    return 0; 
 }
 
 
-// Remover el limite de un proceso
+
 SYSCALL_DEFINE1(luis_remove_memory_limit, pid_t, process_pid) {
     struct task_struct *task;
     struct memory_limitation_list *node;
@@ -242,7 +241,7 @@ SYSCALL_DEFINE1(luis_remove_memory_limit, pid_t, process_pid) {
     task = find_task_by_vpid(process_pid);
     if (!task) {
         
-        return -ESRCH; // Proceso no encontrado
+        return -ESRCH; 
     }
 
     // Verificar si el proceso está en la lista
@@ -261,7 +260,7 @@ SYSCALL_DEFINE1(luis_remove_memory_limit, pid_t, process_pid) {
     list_del(&node->list);
     kfree(node);
 
-    return 0; // Éxito
+    return 0; 
 }
 
 
